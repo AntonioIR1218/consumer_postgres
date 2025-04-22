@@ -4,7 +4,7 @@ import threading
 import psycopg2
 import logging
 import json
-import os
+import time
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,7 +13,7 @@ logging.basicConfig(
 
 app = Flask(__name__)
 
-# Configuración de Kafka (tus credenciales actuales)
+# Configuración de Kafka
 KAFKA_CONFIG = {
     'bootstrap.servers': 'd03h267mtrpq60sg5cf0.any.us-west-2.mpx.prd.cloud.redpanda.com:9092',
     'security.protocol': 'SASL_SSL',
@@ -25,12 +25,12 @@ KAFKA_CONFIG = {
     'enable.auto.commit': False
 }
 
-# Configuración PostgreSQL (tus credenciales actuales)
+# Configuración de PostgreSQL
 DB_PARAMS = {
     'dbname': 'defaultdb',
-    'user': 'avnadmin',
-    'password': 'AVNS_qL4Rejg8nZbXm_WNylM',
-    'host': 'pg-tony-antonioixmatlahua-af20.h.aivencloud.com',
+    'user': 'svnsadmin',
+    'password': 'AVRS_dL4R6j8nZbXm_VWyNA',
+    'host': 'hua-af20.aivencloud.com',
     'port': '12917',
     'sslmode': 'require'
 }
@@ -38,17 +38,21 @@ DB_PARAMS = {
 TOPIC = 'acoustic_tracks'
 
 def get_db_connection():
-    """Conexión segura a PostgreSQL con manejo de errores mejorado"""
-    try:
-        conn = psycopg2.connect(**DB_PARAMS)
-        logging.info("✅ Conexión a PostgreSQL establecida")
-        return conn
-    except Exception as e:
-        logging.error(f"❌ Error al conectar a PostgreSQL: {e}", exc_info=True)
-        raise
+    """Conexión con reintentos"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            conn = psycopg2.connect(**DB_PARAMS)
+            logging.info("✅ Conexión a PostgreSQL establecida")
+            return conn
+        except psycopg2.OperationalError as e:
+            logging.warning(f"⚠️ Intento {attempt + 1} fallido: {str(e)}")
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(2)
 
 def create_table_if_not_exists():
-    """Crea la tabla con la nueva estructura si no existe"""
+    """Crea la tabla si no existe"""
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -68,12 +72,23 @@ def create_table_if_not_exists():
     except Exception as e:
         logging.error(f"Error al crear tabla: {e}", exc_info=True)
 
-def insert_track(track: dict):
-    """Inserta pistas con la estructura real de los datos"""
-    required_fields = ['track_id', 'artists', 'title']
-    
-    if not all(field in track for field in required_fields):
-        logging.warning(f"🚨 Registro omitido (campos faltantes): {json.dumps(track)}")
+def safe_json_parse(message_str):
+    """Intenta parsear el mensaje de diferentes formas"""
+    try:
+        # Intenta como JSON directo
+        return json.loads(message_str)
+    except json.JSONDecodeError:
+        try:
+            # Intenta eliminar comillas extras
+            return json.loads(message_str.strip('"'))
+        except json.JSONDecodeError:
+            logging.error(f"No se pudo parsear el mensaje: {message_str}")
+            return None
+
+def insert_track(track_data):
+    """Inserta una pista con manejo robusto de datos"""
+    if not isinstance(track_data, dict):
+        logging.error(f"🚨 Datos no son diccionario: {type(track_data)}")
         return
 
     try:
@@ -86,20 +101,20 @@ def insert_track(track: dict):
                     ON CONFLICT (track_id) DO NOTHING;
                 """
                 cur.execute(query, (
-                    track.get('track_id'),
-                    track.get('artists'),
-                    track.get('title'),
-                    track.get('track_genre', 'unknown'),
-                    float(track.get('tempo', 0)),
-                    int(track.get('duration_ms', 0))
-                ))
-        logging.info(f"🎵 Insertada: {track.get('title')} - {track.get('artists')}")
+                    track_data.get('track_id'),
+                    track_data.get('artists'),
+                    track_data.get('title'),
+                    track_data.get('track_genre', 'unknown'),
+                    float(track_data.get('tempo', 0)),
+                    int(track_data.get('duration_ms', 0))
+                )
+        logging.info(f"🎵 Insertada: {track_data.get('title')}")
     except Exception as e:
         logging.error(f"💥 Error al insertar: {e}", exc_info=True)
 
 def kafka_consumer_loop():
-    """Consume mensajes de Kafka y los procesa"""
-    create_table_if_not_exists()  # Asegura que la tabla exista
+    """Loop principal del consumer"""
+    create_table_if_not_exists()
     
     consumer = Consumer(KAFKA_CONFIG)
     consumer.subscribe([TOPIC])
@@ -118,10 +133,12 @@ def kafka_consumer_loop():
                 break
 
             try:
-                track = json.loads(msg.value().decode('utf-8'))
-                insert_track(track)
-            except json.JSONDecodeError:
-                logging.error(f"📛 Mensaje no JSON: {msg.value()}")
+                # Decodificar y parsear el mensaje
+                message_str = msg.value().decode('utf-8')
+                track_data = safe_json_parse(message_str)
+                
+                if track_data:
+                    insert_track(track_data)
             except Exception as e:
                 logging.error(f"⚠️ Error procesando mensaje: {e}", exc_info=True)
     finally:
@@ -130,11 +147,7 @@ def kafka_consumer_loop():
 
 @app.route("/health")
 def health_check():
-    return jsonify({
-        "status": "healthy",
-        "service": "kafka-consumer",
-        "kafka_topic": TOPIC
-    }), 200
+    return jsonify({"status": "healthy", "service": "kafka-consumer"}), 200
 
 def main():
     threading.Thread(target=kafka_consumer_loop, daemon=True).start()
