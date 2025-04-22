@@ -107,7 +107,7 @@ def insert_track(track_data):
                     track_data.get('track_genre', 'unknown'),
                     float(track_data.get('tempo', 0)),
                     int(track_data.get('duration_ms', 0))
-                )
+                ))
         logging.info(f"🎵 Insertada: {track_data.get('title')}")
     except Exception as e:
         logging.error(f"💥 Error al insertar: {e}", exc_info=True)
