@@ -115,26 +115,25 @@ def insert_track(track_data):
 def process_message(msg_value):
     """Convierte el mensaje de Kafka a un diccionario"""
     try:
-        # Asegúrate de que esté en string
         if isinstance(msg_value, bytes):
             msg_value = msg_value.decode('utf-8')
-        
-        # Intenta decodificar directamente
-        try:
-            return json.loads(msg_value)
-        except json.JSONDecodeError:
-            # Segunda opción: limpia comillas externas y decodifica como escape
-            cleaned = msg_value.strip('"\'') \
-                               .encode('utf-8') \
-                               .decode('unicode_escape')
-            return json.loads(cleaned)
-    
+
+        data = json.loads(msg_value)
+
+        if isinstance(data, dict):
+            return data
+        else:
+            logging.error(f"🚨 El mensaje no es un diccionario JSON válido: {type(data)}")
+            return None
+
     except json.JSONDecodeError as e:
-        logging.error(f"Error decodificando JSON: {e} | Mensaje: {msg_value[:200]}...")
+        logging.error(f"💥 Error al decodificar JSON: {e} | Mensaje: {msg_value[:200]}...")
         return None
     except Exception as e:
-        logging.error(f"Error inesperado procesando mensaje: {e}")
+        logging.error(f"❗ Error inesperado: {e}", exc_info=True)
         return None
+
+
 
 
 def kafka_consumer_loop():
