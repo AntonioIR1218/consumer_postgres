@@ -28,9 +28,9 @@ KAFKA_CONFIG = {
 # Configuración de PostgreSQL
 DB_PARAMS = {
     'dbname': 'defaultdb',
-    'user': 'svnsadmin',
-    'password': 'AVRS_dL4R6j8nZbXm_VWyNA',
-    'host': 'hua-af20.aivencloud.com',
+    'user': 'avnadmin',
+    'password': 'AVNS_qL4Rejg8nZbXm_WNylM',
+    'host': 'pg-tony-antonioixmatlahua-af20.h.aivencloud.com',
     'port': '12917',
     'sslmode': 'require'
 }
