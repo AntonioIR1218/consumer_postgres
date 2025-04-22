@@ -132,15 +132,20 @@ def kafka_consumer_loop():
                 logging.error(f"❌ Error en Kafka: {msg.error()}")
                 break
 
+            # ----- BLOQUE ACTUALIZADO -----
             try:
-                # Decodificar y parsear el mensaje
-                message_str = msg.value().decode('utf-8')
-                track_data = safe_json_parse(message_str)
+                msg_value = msg.value()
+                track_data = process_message(msg_value)
                 
                 if track_data:
+                    logging.debug(f"📦 Datos procesados: {track_data}")  # Para debug
                     insert_track(track_data)
+                else:
+                    logging.warning(f"⚠️ Mensaje omitido: {msg_value[:100]}...")
             except Exception as e:
                 logging.error(f"⚠️ Error procesando mensaje: {e}", exc_info=True)
+            # ------------------------------
+            
     finally:
         consumer.close()
         logging.info("🛑 Consumer cerrado")
