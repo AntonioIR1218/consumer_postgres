@@ -113,12 +113,17 @@ def insert_track(track_data):
         logging.error(f"💥 Error al insertar: {e}", exc_info=True)
         
 def process_message(msg_value):
-    """Convierte el mensaje de Kafka a un diccionario"""
+    """Convierte el mensaje de Kafka a un diccionario JSON válido"""
     try:
         if isinstance(msg_value, bytes):
             msg_value = msg_value.decode('utf-8')
-
+        
+        # Primer intento: decode normal
         data = json.loads(msg_value)
+        
+        # Si todavía es string, intenta un segundo decode
+        if isinstance(data, str):
+            data = json.loads(data)
 
         if isinstance(data, dict):
             return data
@@ -127,10 +132,10 @@ def process_message(msg_value):
             return None
 
     except json.JSONDecodeError as e:
-        logging.error(f"💥 Error al decodificar JSON: {e} | Mensaje: {msg_value[:200]}...")
+        logging.error(f"💥 Error decodificando JSON: {e} | Mensaje: {msg_value[:200]}...")
         return None
     except Exception as e:
-        logging.error(f"❗ Error inesperado: {e}", exc_info=True)
+        logging.error(f"💥 Error inesperado procesando mensaje: {e}", exc_info=True)
         return None
 
 
