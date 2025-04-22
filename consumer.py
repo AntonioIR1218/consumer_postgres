@@ -111,6 +111,31 @@ def insert_track(track_data):
         logging.info(f"🎵 Insertada: {track_data.get('title')}")
     except Exception as e:
         logging.error(f"💥 Error al insertar: {e}", exc_info=True)
+def process_message(msg_value):
+    """Convierte el mensaje de Kafka a un diccionario"""
+    try:
+        # Si el mensaje viene en bytes, lo decodificamos
+        if isinstance(msg_value, bytes):
+            msg_value = msg_value.decode('utf-8')
+        
+        # Limpiamos comillas extras si existen
+        msg_value = msg_value.strip('"\'')
+        
+        # Parseamos el JSON
+        data = json.loads(msg_value)
+        
+        # Verificamos que sea un diccionario
+        if not isinstance(data, dict):
+            logging.warning(f"El mensaje no es un diccionario: {type(data)}")
+            return None
+            
+        return data
+    except json.JSONDecodeError as e:
+        logging.error(f"Error decodificando JSON: {e} | Mensaje: {msg_value[:200]}...")
+        return None
+    except Exception as e:
+        logging.error(f"Error inesperado procesando mensaje: {e}")
+        return None
 
 def kafka_consumer_loop():
     """Loop principal del consumer"""
